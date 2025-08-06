@@ -54,7 +54,7 @@ syzygy:
   standard:
     enabled: true                        # Activate local syzygy endgame tablebases.
     paths:                                # Paths to local syzygy endgame tablebases.
-      - "/engines/syzygy"
+      - "./engines/syzygy"
     max_pieces: 7                         # Count of max pieces in the local syzygy endgame tablebases.
     instant_play: true                    # Whether the bot should play directly from syzygy without engine if possible.
   antichess:
