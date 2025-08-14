@@ -1,9 +1,4 @@
 #!/usr/bin/env python3
-"""
-fetch_and_build.py
-Fetch Chess960 bot games and build Polyglot book using create_polyglot.py.
-Includes all speeds and prints stats about how many PGNs were scanned per stored game.
-"""
 
 import os
 import sys
@@ -13,7 +8,6 @@ from collections import defaultdict
 
 import requests
 import chess.pgn
-from tqdm import tqdm
 
 BOTS = [
     "SoggiestShrimp", "AttackKing_Bot", "PositionalAI", "mayhem23111",
@@ -29,13 +23,10 @@ MAX_GAMES_PER_BOT = 5000
 MIN_FEN_GAMES = 3
 SPEEDS = ["blitz", "rapid", "classical", "bullet", "ultraBullet", "correspondence"]
 MASTER_PGN = "master_chess960_book.pgn"
-
 API_BASE = "https://lichess.org"
 
-
 def headers():
-    return {"Accept": "application/x-chess-pgn"}     
-
+    return {"Accept": "application/x-chess-pgn"}
 
 def export_games(username):
     params = {
@@ -51,7 +42,6 @@ def export_games(username):
     r.raise_for_status()
     return r.text
 
-
 def parse_pgn_stream(pgn_text):
     buf = io.StringIO(pgn_text)
     while True:
@@ -59,7 +49,6 @@ def parse_pgn_stream(pgn_text):
         if not game:
             break
         yield game
-
 
 def is_good_game(game):
     hd = game.headers
@@ -80,7 +69,6 @@ def is_good_game(game):
         return False
     return True
 
-
 def trim_game(game):
     board = chess.Board(game.headers["FEN"])
     new_game = chess.pgn.Game()
@@ -95,19 +83,15 @@ def trim_game(game):
         ply += 1
     return new_game
 
-
 def write_pgn(games, path):
     with open(path, "w", encoding="utf-8") as f:
         for g in games:
             f.write(str(g))
             f.write("\n\n")
 
-
 def main():
-    print("Fetching games...")
     games_by_fen = defaultdict(list)
     seen = set()
-
     for bot in BOTS:
         print(f"Downloading for {bot}...")
         try:
@@ -115,7 +99,6 @@ def main():
         except Exception as e:
             print(f"Failed for {bot}: {e}")
             continue
-
         pgn_count = 0
         for g in parse_pgn_stream(pgn_text):
             pgn_count += 1
@@ -129,20 +112,16 @@ def main():
             tg = trim_game(g)
             games_by_fen[fen].append(tg)
             print(f"Stored game #{pgn_count} from {bot}, speed={g.headers.get('Speed','?')}")
-
     final_games = []
     for fen, arr in games_by_fen.items():
         if len(arr) >= MIN_FEN_GAMES:
             final_games.extend(arr)
-
     print(f"Kept {len(final_games)} games after filtering.")
     write_pgn(final_games, MASTER_PGN)
     print(f"Master PGN saved to {MASTER_PGN}")
-
     print("Building Polyglot book using create_polyglot.py...")
     subprocess.run([sys.executable, "create_polyglot.py"], check=True)
     print("Book creation complete.")
-
 
 if __name__ == "__main__":
     main()
