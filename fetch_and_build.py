@@ -5,21 +5,20 @@ import sys
 import io
 import subprocess
 from collections import defaultdict
+import time
 
 import requests
 import chess.pgn
 
 BOTS = [
-    "SoggiestShrimp", "AttackKing_Bot", "PositionalAI", "mayhem23111",
-    "InvinxibleFlxsh", "YoBot_v2", "VEER-OMEGA-BOT", "MaggiChess16",
-    "NimsiluBot", "pangubot", "Loss-Not-Defined", "Alexnajax_Fan",
-    "strain-on-veins", "BOTTYBADDY11", "ChampionKitten",
-    "LeelaMultiPoss", "ToromBot",
+    "MaggiChess16", "pangubot", "Loss-Not-Defined", "Alexnajax_Fan",
+    "strain-on-veins", "ChampionKitten", "LeelaMultiPoss",
     "NNUE_Drift", "Strain-On-Veins", "Yuki_1324"
 ]
+
 MIN_RATING = 2375
 MAX_PLIES = 24
-MAX_GAMES_PER_BOT = 5000
+MAX_GAMES_PER_BOT = 3000
 MIN_FEN_GAMES = 3
 SPEEDS = ["blitz", "rapid", "classical", "bullet", "ultraBullet", "correspondence"]
 MASTER_PGN = "master_chess960_book.pgn"
@@ -41,9 +40,14 @@ def export_games(username):
         "opening": "true"
     }
     url = f"{API_BASE}/api/games/user/{username}.pgn"
-    r = requests.get(url, params=params, headers=headers(), stream=True)
-    r.raise_for_status()
-    return r.text
+    for attempt in range(3):
+        r = requests.get(url, params=params, headers=headers(), stream=True)
+        if r.status_code == 429:
+            time.sleep(5)
+            continue
+        r.raise_for_status()
+        return r.text
+    raise Exception(f"Failed to fetch {username} after 3 retries due to 429")
 
 def parse_pgn_stream(pgn_text):
     buf = io.StringIO(pgn_text)
