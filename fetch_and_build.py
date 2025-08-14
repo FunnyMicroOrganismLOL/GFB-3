@@ -26,18 +26,21 @@ MASTER_PGN = "master_chess960_book.pgn"
 API_BASE = "https://lichess.org"
 
 def headers():
-    return {"Accept": "application/x-chess-pgn"}
+    token = os.getenv("TOKEN", "").strip()
+    h = {"Accept": "application/x-chess-pgn"}
+    if token:
+        h["Authorization"] = f"Bearer {token}"
+    return h
 
 def export_games(username):
     params = {
         "max": str(MAX_GAMES_PER_BOT),
         "perfType": "chess960",
         "rated": "true",
-        "speeds": ",".join(SPEEDS),
-        "opening": "true",
         "moves": "true",
+        "opening": "true"
     }
-    url = f"{API_BASE}/api/games/user/{username}"
+    url = f"{API_BASE}/api/games/user/{username}.pgn"
     r = requests.get(url, params=params, headers=headers(), stream=True)
     r.raise_for_status()
     return r.text
@@ -99,6 +102,7 @@ def main():
         except Exception as e:
             print(f"Failed for {bot}: {e}")
             continue
+
         pgn_count = 0
         for g in parse_pgn_stream(pgn_text):
             pgn_count += 1
@@ -112,13 +116,16 @@ def main():
             tg = trim_game(g)
             games_by_fen[fen].append(tg)
             print(f"Stored game #{pgn_count} from {bot}, speed={g.headers.get('Speed','?')}")
+
     final_games = []
     for fen, arr in games_by_fen.items():
         if len(arr) >= MIN_FEN_GAMES:
             final_games.extend(arr)
+
     print(f"Kept {len(final_games)} games after filtering.")
     write_pgn(final_games, MASTER_PGN)
     print(f"Master PGN saved to {MASTER_PGN}")
+
     print("Building Polyglot book using create_polyglot.py...")
     subprocess.run([sys.executable, "create_polyglot.py"], check=True)
     print("Book creation complete.")
