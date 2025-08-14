@@ -15,7 +15,6 @@ import requests
 import chess.pgn
 from tqdm import tqdm
 
-# ---------------- CONFIG ----------------
 BOTS = [
     "SoggiestShrimp", "AttackKing_Bot", "PositionalAI", "mayhem23111",
     "InvinxibleFlxsh", "YoBot_v2", "VEER-OMEGA-BOT", "MaggiChess16",
@@ -30,13 +29,12 @@ MAX_GAMES_PER_BOT = 5000
 MIN_FEN_GAMES = 3
 SPEEDS = ["blitz", "rapid", "classical", "bullet", "ultraBullet", "correspondence"]
 MASTER_PGN = "master_chess960_book.pgn"
-# ----------------------------------------
 
 API_BASE = "https://lichess.org"
 
 
 def headers():
-    return {"Accept": "application/x-chess-pgn"}  # no token needed
+    return {"Accept": "application/x-chess-pgn"}     
 
 
 def export_games(username):
@@ -132,7 +130,6 @@ def main():
             games_by_fen[fen].append(tg)
             print(f"Stored game #{pgn_count} from {bot}, speed={g.headers.get('Speed','?')}")
 
-    # Filter by min games per FEN
     final_games = []
     for fen, arr in games_by_fen.items():
         if len(arr) >= MIN_FEN_GAMES:
@@ -142,7 +139,6 @@ def main():
     write_pgn(final_games, MASTER_PGN)
     print(f"Master PGN saved to {MASTER_PGN}")
 
-    # Call create_polyglot.py
     print("Building Polyglot book using create_polyglot.py...")
     subprocess.run([sys.executable, "create_polyglot.py"], check=True)
     print("Book creation complete.")
