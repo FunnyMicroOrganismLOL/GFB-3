@@ -85,8 +85,8 @@ opening_books:
     standard_white:
       selection: weighted_random
       names:
-        - Optimus2502
-        - Optimus4
+        - DefaultBook
+        - BackupBook
 
     standard_black:
       selection: best_move
@@ -247,6 +247,4 @@ books:                                    # Names of the opening books (to be us
   DefaultBook: "./engines/Book2.bin"
   BackupBook: "./engines/Book3.bin"
   BlackBook: "./engines/black.bin"
-  Optimus2502: "./engines/OPTIMUS2502.bin"
-  Optimus4: "./engines/OPTIMUS4.bin"
   Goodbook: "./engines/book.bin"
