@@ -25,7 +25,7 @@ MASTER_PGN = "master_chess960_book.pgn"
 API_BASE = "https://lichess.org"
 
 def headers():
-    token = os.getenv("TOKEN", "").strip()
+    token = os.getenv("BOOK_TOKEN", "").strip()
     h = {"Accept": "application/x-chess-pgn"}
     if token:
         h["Authorization"] = f"Bearer {token}"
