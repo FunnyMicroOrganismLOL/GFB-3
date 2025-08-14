@@ -1,89 +1,152 @@
-import requests
-import time
+#!/usr/bin/env python3
+"""
+fetch_and_build.py
+Fetch Chess960 bot games and build Polyglot book using create_polyglot.py.
+Includes all speeds and prints stats about how many PGNs were scanned per stored game.
+"""
+
 import os
+import sys
+import io
+import subprocess
+from collections import defaultdict
 
+import requests
+import chess.pgn
+from tqdm import tqdm
+
+# ---------------- CONFIG ----------------
 BOTS = [
-    "NimsiluBot",
-    "MaggiChess16",
-    "NNUE_Drift",
-    "Endogenetic-Bot",
-    "AttackKing_Bot"
+    "SoggiestShrimp", "AttackKing_Bot", "PositionalAI", "mayhem23111",
+    "InvinxibleFlxsh", "YoBot_v2", "VEER-OMEGA-BOT", "MaggiChess16",
+    "NimsiluBot", "pangubot", "Loss-Not-Defined", "Alexnajax_Fan",
+    "strain-on-veins", "BOTTYBADDY11", "ChampionKitten",
+    "LeelaMultiPoss", "ToromBot",
+    "NNUE_Drift", "Strain-On-Veins", "Yuki_1324"
 ]
+MIN_RATING = 2375
+MAX_PLIES = 24
+MAX_GAMES_PER_BOT = 5000
+MIN_FEN_GAMES = 3
+SPEEDS = ["blitz", "rapid", "classical", "bullet", "ultraBullet", "correspondence"]
+MASTER_PGN = "master_chess960_book.pgn"
+# ----------------------------------------
 
-OUTPUT_PGN = "filtered_960_bots_2200plus.pgn"
+API_BASE = "https://lichess.org"
 
-def is_valid_line(line):
-    return line.startswith("[Event") or line.startswith("[Site") or line.startswith("[Date") or line.startswith("[Round") or line.startswith("[White") or line.startswith("[Black") or line.startswith("[Result") or line.startswith("[FEN") or line.startswith("[SetUp") or line.startswith("1.") or line == ""
 
-def fetch_full_games(bot):
-    url = f"https://lichess.org/api/games/user/{bot}"
-    headers = {
-        "Accept": "application/x-chess-pgn"
-    }
+def headers():
+    return {"Accept": "application/x-chess-pgn"}  # no token needed
+
+
+def export_games(username):
     params = {
-        "max": 3000,
-        "variant": "chess960",
+        "max": str(MAX_GAMES_PER_BOT),
         "perfType": "chess960",
-        "vs": ",".join(BOTS),
-        "pgnInJson": False,
         "rated": "true",
-        "analysed": "false",
-        "opening": "false",
-        "clocks": "false",
-        "evals": "false"
+        "speeds": ",".join(SPEEDS),
+        "opening": "true",
+        "moves": "true",
     }
+    url = f"{API_BASE}/api/games/user/{username}"
+    r = requests.get(url, params=params, headers=headers(), stream=True)
+    r.raise_for_status()
+    return r.text
 
-    print(f"Fetching games for {bot}...")
-    response = requests.get(url, headers=headers, params=params)
-    if response.status_code != 200:
-        print(f"  Failed for {bot} - {response.status_code}")
-        return ""
 
-    return response.text
+def parse_pgn_stream(pgn_text):
+    buf = io.StringIO(pgn_text)
+    while True:
+        game = chess.pgn.read_game(buf)
+        if not game:
+            break
+        yield game
 
-def filter_games(pgn_data):
-    games = pgn_data.strip().split("\n\n\n")
-    valid_games = []
 
-    for game in games:
-        lines = game.split("\n")
-        tags = {line.split(" ")[0][1:]: line for line in lines if line.startswith("[")}
-        if "[Variant \"Chess960\"]" not in tags.get("Variant", ""):
-            continue
-        white = tags.get("White", "")
-        black = tags.get("Black", "")
-        w_rating_line = tags.get("WhiteElo", "")
-        b_rating_line = tags.get("BlackElo", "")
-        w_prov = "WhiteRatingDiff" not in tags
-        b_prov = "BlackRatingDiff" not in tags
+def is_good_game(game):
+    hd = game.headers
+    if hd.get("Variant", "").lower() != "chess960":
+        return False
+    if hd.get("SetUp") != "1" or not hd.get("FEN"):
+        return False
+    if hd.get("Speed", "").lower() not in [s.lower() for s in SPEEDS]:
+        return False
+    try:
+        wr = int(hd.get("WhiteElo", "0"))
+        br = int(hd.get("BlackElo", "0"))
+    except ValueError:
+        return False
+    if wr < MIN_RATING or br < MIN_RATING:
+        return False
+    if hd.get("Result") not in ("1-0", "0-1", "1/2-1/2"):
+        return False
+    return True
 
-        def extract_rating(line):
-            try:
-                return int(line.split('"')[1])
-            except:
-                return 0
 
-        wr = extract_rating(w_rating_line)
-        br = extract_rating(b_rating_line)
+def trim_game(game):
+    board = chess.Board(game.headers["FEN"])
+    new_game = chess.pgn.Game()
+    for k, v in game.headers.items():
+        new_game.headers[k] = v
+    node = new_game
+    ply = 0
+    for mv in game.mainline_moves():
+        if ply >= MAX_PLIES:
+            break
+        node = node.add_variation(mv)
+        ply += 1
+    return new_game
 
-        if (w_prov or wr >= 2400) and (b_prov or br >= 2400):
-            valid_games.append(game.strip())
 
-    return valid_games
+def write_pgn(games, path):
+    with open(path, "w", encoding="utf-8") as f:
+        for g in games:
+            f.write(str(g))
+            f.write("\n\n")
+
 
 def main():
-    all_games = []
-    for bot in BOTS:
-        pgn_data = fetch_full_games(bot)
-        time.sleep(2)  # rate limit
-        filtered = filter_games(pgn_data)
-        print(f"  → {len(filtered)} valid games for {bot}")
-        all_games.extend(filtered)
+    print("Fetching games...")
+    games_by_fen = defaultdict(list)
+    seen = set()
 
-    print(f"\nTotal games collected: {len(all_games)}")
-    with open(OUTPUT_PGN, "w", encoding="utf-8") as f:
-        f.write("\n\n\n".join(all_games))
-    print(f"PGN saved to {OUTPUT_PGN}")
+    for bot in BOTS:
+        print(f"Downloading for {bot}...")
+        try:
+            pgn_text = export_games(bot)
+        except Exception as e:
+            print(f"Failed for {bot}: {e}")
+            continue
+
+        pgn_count = 0
+        for g in parse_pgn_stream(pgn_text):
+            pgn_count += 1
+            if not is_good_game(g):
+                continue
+            fen = g.headers["FEN"]
+            key = (fen, g.board().variation_san(g.mainline_moves()))
+            if key in seen:
+                continue
+            seen.add(key)
+            tg = trim_game(g)
+            games_by_fen[fen].append(tg)
+            print(f"Stored game #{pgn_count} from {bot}, speed={g.headers.get('Speed','?')}")
+
+    # Filter by min games per FEN
+    final_games = []
+    for fen, arr in games_by_fen.items():
+        if len(arr) >= MIN_FEN_GAMES:
+            final_games.extend(arr)
+
+    print(f"Kept {len(final_games)} games after filtering.")
+    write_pgn(final_games, MASTER_PGN)
+    print(f"Master PGN saved to {MASTER_PGN}")
+
+    # Call create_polyglot.py
+    print("Building Polyglot book using create_polyglot.py...")
+    subprocess.run([sys.executable, "create_polyglot.py"], check=True)
+    print("Book creation complete.")
+
 
 if __name__ == "__main__":
     main()
